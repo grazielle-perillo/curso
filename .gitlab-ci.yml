@@ -5,6 +5,8 @@ variables:
   TAG_ENV: qa
   TAG_ENV_PROD: prod
 
+
+
 stages:
   - test
   - build
@@ -50,7 +52,7 @@ package-dev:
   image: harbor.rd.com.br/devops/rd-dind:2.0.0
   stage: package
   before_script:
-   - export CI_PROJECT_DIR=marketingsales/rd-closeup-batch
+   - export CI_PROJECT_DIR=marketingvendas/rd-iqvia-batch
    - export DATE_PERIOD=$(date '+%Y/%m/%d')
    - export REF_COMMIT=$CI_COMMIT_SHORT_SHA
    - export TAG_ENV=$TAG_ENV_DEV
@@ -96,7 +98,7 @@ package:
   image: harbor.rd.com.br/devops/rd-dind:2.0.0
   stage: package
   before_script:
-   - export CI_PROJECT_DIR=marketingsales/rd-closeup-batch
+   - export CI_PROJECT_DIR=marketingvendas/rd-iqvia-batch
    - export REF_COMMIT=$CI_COMMIT_SHORT_SHA
    - export TAG_ENV=$TAG_ENV
    - export DATE_PERIOD=$(date '+%Y/%m/%d')
