@@ -1,0 +1,119 @@
+variables:
+  DOCKER_DRIVER: overlay2
+  SPRING_PROFILES_ACTIVE: docker
+  TAG_ENV_DEV: dev
+  TAG_ENV: qa
+  TAG_ENV_PROD: prod
+
+stages:
+  - test
+  - build
+  - package
+
+test-sonar:
+  image: harbor.rd.com.br/devops/rd-maven:3-openjdk-11
+  stage: test
+  before_script:
+  - export MAVEN_OPTS="-Xmx1024m"
+  - git clone http://$GITLAB_USER:$GITLAB_PASSW@git.raiadrogasil.com.br/devops-rd/config-pipeline.git
+  script:
+    - rm -f src/main/resources/logback*.xml
+    - cp config-pipeline/logback-spring.xml src/main/resources/
+    - rm -rf config-pipeline/
+    - mvn verify sonar:sonar -Dsonar.host.url=$SONAR_URL -Dsonar.login=$SONAR_LOGIN -Duser.timezone=America/Sao_Paulo -Dspring.profiles.active=$TAG_ENV_DEV -Dspring.cloud.config.uri=https://$CONFIGSERVER_USER:$CONFIGSERVER_PASSW@api-$TAG_ENV_DEV.rd.com.br/configserver
+  tags:
+   - docker
+  only:
+    refs:
+      - develop
+
+
+maven-build-dev:
+  image: harbor.rd.com.br/devops/rd-maven:3-openjdk-11
+  stage: build
+  before_script:
+  - export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=1536m"
+  - export CONFIGSERVER_USER=$CONFIGSERVER_USER
+  - export CONFIGSERVER_PASSW=$CONFIGSERVER_PASSW
+  script:
+    - mvn package
+  artifacts:
+    paths:
+      - target/*.jar
+  tags:
+   - docker
+  only:
+    refs:
+      - develop
+
+package-dev:
+  image: harbor.rd.com.br/devops/rd-dind:2.0.0
+  stage: package
+  before_script:
+   - export CI_PROJECT_DIR=marketingsales/rd-closeup-batch
+   - export DATE_PERIOD=$(date '+%Y/%m/%d')
+   - export REF_COMMIT=$CI_COMMIT_SHORT_SHA
+   - export TAG_ENV=$TAG_ENV_DEV
+   - export SPR_APP_NAME=$(grep spring.application.name src/main/resources/application.properties | cut -f2 -d= | tr -d '\15')
+   - export VERSION=$(grep '<version>' pom.xml | awk 'FNR==2{print $0}' | cut -d'>' -f2 | cut -d'<' -f1)
+   - git clone http://$GITLAB_USER:$GITLAB_PASSW@git.raiadrogasil.com.br/devops-rd/config-pipeline.git
+  script:
+   - mv config-pipeline/$SPR_APP_NAME/Dockerfile .
+   - sed -it "s|DATE_PERIOD|$DATE_PERIOD|g" Dockerfile
+   - sed -it "s|TAG_ENV|$TAG_ENV|g" Dockerfile
+   - sed -it "s|CI_PROJECT_NAME|$CI_PROJECT_NAME|g" Dockerfile
+   - sed -it "s|VERSION|$VERSION|g" Dockerfile
+   - docker build -t harbor.rd.com.br/$CI_PROJECT_DIR:$REF_COMMIT -t harbor.rd.com.br/$CI_PROJECT_DIR:latest .
+   - docker push harbor.rd.com.br/$CI_PROJECT_DIR:$REF_COMMIT
+   - docker push harbor.rd.com.br/$CI_PROJECT_DIR:latest
+  tags:
+   - docker
+  only:
+    refs:
+      - develop
+
+##############################################################################################################################################################
+
+maven-build:
+  image: harbor.rd.com.br/devops/rd-maven:3-openjdk-11
+  stage: build
+  before_script:
+  - export MAVEN_OPTS="-Xmx1024m -XX:MaxPermSize=1536m"
+  - export CONFIGSERVER_USER=$CONFIGSERVER_USER
+  - export CONFIGSERVER_PASSW=$CONFIGSERVER_PASSW
+  script:
+    - mvn package
+  artifacts:
+    paths:
+      - target/*.jar
+  tags:
+   - docker
+  only:
+    refs:
+      - master
+
+package:
+  image: harbor.rd.com.br/devops/rd-dind:2.0.0
+  stage: package
+  before_script:
+   - export CI_PROJECT_DIR=marketingsales/rd-closeup-batch
+   - export REF_COMMIT=$CI_COMMIT_SHORT_SHA
+   - export TAG_ENV=$TAG_ENV
+   - export DATE_PERIOD=$(date '+%Y/%m/%d')
+   - export SPR_APP_NAME=$(grep spring.application.name src/main/resources/application.properties | cut -f2 -d= | tr -d '\15')
+   - export VERSION=$(grep '<version>' pom.xml | awk 'FNR==2{print $0}' | cut -d'>' -f2 | cut -d'<' -f1)
+   - git clone http://$GITLAB_USER:$GITLAB_PASSW@git.raiadrogasil.com.br/devops-rd/config-pipeline.git
+  script:
+   - mv config-pipeline/$SPR_APP_NAME/Dockerfile .
+   - sed -it "s|DATE_PERIOD|$DATE_PERIOD|g" Dockerfile
+   - sed -it "s|TAG_ENV|$TAG_ENV|g" Dockerfile
+   - sed -it "s|CI_PROJECT_NAME|$CI_PROJECT_NAME|g" Dockerfile
+   - sed -it "s|VERSION|$VERSION|g" Dockerfile
+   - docker build -t harbor.rd.com.br/$CI_PROJECT_DIR:$REF_COMMIT -t harbor.rd.com.br/$CI_PROJECT_DIR:prod .
+   - docker push harbor.rd.com.br/$CI_PROJECT_DIR:$REF_COMMIT
+   - docker push harbor.rd.com.br/$CI_PROJECT_DIR:prod
+  tags:
+   - docker
+  only:
+    refs:
+      - master
